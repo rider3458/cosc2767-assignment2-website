@@ -1,0 +1,92 @@
+---
+Parameters:
+  Token:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: "dockerhub"
+    Description: Dockerhub token
+
+Resources:
+  JenkinsServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-0cff7528ff583bf9a
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref JenkinsAndTomcatServerSG
+      Tags:
+        - Key: "Name"
+          Value: "s3878480_assignment2_Jenkins_server"
+      KeyName: !Ref S3878480A2Key
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            sudo su -   
+            sudo yum install -y docker
+            docker login -u rider3458 -p ${Token}
+            systemctl start docker
+            docker pull rider3458/s3878480_assignment_2:s3878480_jenkins
+            docker run -p 8080:8080 rider3458/s3878480_assignment_2:s3878480_jenkins
+  
+  TomcatServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-0cff7528ff583bf9a
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref JenkinsAndTomcatServerSG
+      Tags:
+        - Key: "Name"
+          Value: "s3878480_assignment2_Tomcat_server"
+      KeyName: !Ref S3878480A2Key
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            sudo su -   
+            sudo yum install -y docker
+            docker login -u rider3458 -p ${Token}
+            systemctl start docker
+            useradd dockeradmin
+            usermod --password $(echo dockeradmin | openssl passwd -1 -stdin) dockeradmin
+            usermod -aG docker dockeradmin
+            sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+            service sshd reload
+            docker pull rider3458/s3878480_assignment_2:s3878480_tomcat
+            docker run -p 8080:8080 --name tomcat rider3458/s3878480_assignment_2:s3878480_tomcat
+
+  JenkinsAndTomcatServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and port 8080 for Tomcat
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+        - CidrIp: 0.0.0.0/0
+          FromPort: 8080
+          IpProtocol: tcp
+          ToPort: 8090
+
+  S3878480A2Key:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: "s3878480_A2_key"
+
+Outputs:
+  TomcatWebsite:
+    Description: Tomcat Server Public IP
+    Value: !Join
+      - ''
+      - - !GetAtt TomcatServer.PublicIp
+        - ":8080/assignment-2"
+  
+  JenkinsWebsite:
+    Description: Jenkins Server Public IP
+    Value: !Join
+      - ''
+      - - !GetAtt JenkinsServer.PublicIp
+        - ":8080"
